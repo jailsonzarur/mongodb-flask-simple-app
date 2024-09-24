@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request
 from flask_restful import Api, Resource
 from pymongo import MongoClient
 import bcrypt
+import json
 
 app = Flask(__name__)
 api = Api(app)
@@ -13,7 +14,7 @@ users = db["Users"]
 def verifyUser(username, password):
     hashed = users.find({f"Username": username})[0]["Password"]
 
-    if bcrypt.hashpw(bytes(password, 'utf8'), hashed) == hashed:
+    if bcrypt.hashpw(password.encode('utf8'), hashed) == hashed:
         return True
     return False
 
@@ -72,13 +73,48 @@ class Store(Resource):
 
         retJson = {
             'status_code': 200,
-            'msg': "Sentence sabed sucessfully"
+            'msg': "Sentence saved sucessfully"
         }
         return retJson
 
+class Retrive(Resource):
+    def get(self):
+        postedData = request.get_json()
+
+        username = postedData["username"]
+        password = postedData["password"]
+
+        correct_pw = verifyUser(username, password)
+
+        if not correct_pw:
+            retJson = {
+                "status_code": 302,
+                "msg": "Invalid username or password"
+            }
+            return retJson
+        
+        num_tokens = countTokens(username)
+        if num_tokens <= 0:
+            retJson = {
+                'status_code': 301,
+                'msg': "Out of tokens."
+            }
+            return retJson
+        
+        users.update_one({"Username": username}, {"$set": {"Tokens": num_tokens-1}})
+
+        sentence = users.find({"Username": username})[0]["Sentence"]
+        
+        retJson = {
+            'sentence': sentence
+        }
+        return retJson
+
+        
 
 api.add_resource(Register, '/register')
 api.add_resource(Store, '/store')
+api.add_resource(Retrive, '/retrive')
 
 @app.route('/')
 def hello():
